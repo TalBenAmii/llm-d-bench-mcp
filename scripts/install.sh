@@ -182,11 +182,14 @@ ensure_env   # create .env from .env.example if missing
 
 step "LLM provider"
 set_env_var LLM_PROVIDER claude-agent-sdk
-log "Using claude-agent-sdk — no API key. Make sure the 'claude' CLI is installed and logged in."
+log "Using claude-agent-sdk — no API key (it authenticates through your local 'claude' login)."
 log "(Other providers — anthropic, openai — are planned for a future release.)"
+# claude-agent-sdk can't run without the `claude` CLI: surface an already-installed copy (adds
+# ~/.local/bin to PATH) or offer the official installer. Non-fatal — you can install + log in later.
+ensure_claude_cli || warn "Continuing without the 'claude' CLI — install it and run 'claude auth login' before using the server."
 
-HF_TOKEN_VAL="$(ask 'Optional HF_TOKEN for gated model deploys (blank to skip):' '')"
-[[ -n "$HF_TOKEN_VAL" ]] && set_env_var HF_TOKEN "$HF_TOKEN_VAL"
+# HF_TOKEN (for GATED HF model deploys, e.g. Llama/Gemma) isn't prompted — set it in the project's
+# .env, or pass `-e HF_TOKEN=hf_…` to your client, only if you'll actually deploy a gated model.
 
 if [[ -x "$VENV/bin/llm-d-bench-mcp" ]]; then
   CMD_ARGV=("$VENV/bin/llm-d-bench-mcp"); CMD_DISPLAY="$VENV/bin/llm-d-bench-mcp"
@@ -196,32 +199,24 @@ fi
 
 print_claude_code_snippet() {
   echo; echo "── Claude Code (CLI) ───────────────────────────────"
-  if [[ -n "$HF_TOKEN_VAL" ]]; then
-    printf '  claude mcp add %s -s user -e "HF_TOKEN=%s" -- %s\n' "$SERVER_NAME" "$HF_TOKEN_VAL" "$CMD_DISPLAY"
-  else
-    printf '  claude mcp add %s -s user -- %s\n' "$SERVER_NAME" "$CMD_DISPLAY"
-  fi
+  printf '  claude mcp add %s -s user -- %s\n' "$SERVER_NAME" "$CMD_DISPLAY"
 }
 register_claude_code() {
   if ! command -v claude >/dev/null 2>&1; then
     warn "The 'claude' CLI is not on PATH — run this later:"; print_claude_code_snippet; return 0
   fi
   local scope; scope="$(ask 'Scope? [local|user|project] (default: user):' user)"
-  local args=(mcp add "$SERVER_NAME" -s "$scope"); [[ -n "$HF_TOKEN_VAL" ]] && args+=(-e "HF_TOKEN=$HF_TOKEN_VAL")
-  args+=(-- "${CMD_ARGV[@]}")
+  local args=(mcp add "$SERVER_NAME" -s "$scope" -- "${CMD_ARGV[@]}")
   if claude "${args[@]}"; then log "Registered with Claude Code (scope: $scope). Check it with 'claude mcp list' or '/mcp' in a session."
   else warn "'claude mcp add' failed — register manually:"; print_claude_code_snippet; fi
 }
 
 step "Register with Claude Code"
-echo "  1) Claude Code (CLI) — register it for you"
-echo "  2) Just print the config — make no changes  (default)"
-echo "  0) Skip — I'll wire it up myself"
-log "(Claude Desktop, Cursor, VS Code, and Codex CLI are planned for a future release.)"
-case "$(ask 'Choice [1/2/0]:' 2 | tr -d '[:space:]')" in
-  1) register_claude_code ;;
-  0) log "Skipping client registration." ;;
-  *) print_claude_code_snippet ;;
+echo "  0) Claude Code (CLI) — register it for you  (default)"
+echo "  1) Skip — I'll wire it up myself"
+case "$(ask 'Choice [0/1]:' 0 | tr -d '[:space:]')" in
+  1) log "Skipping client registration."; print_claude_code_snippet ;;
+  *) register_claude_code ;;
 esac
 
 step "Done"

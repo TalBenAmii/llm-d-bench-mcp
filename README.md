@@ -48,8 +48,8 @@ cd llm-d-bench-mcp
 ```
 
 It is idempotent (safe to re-run). The `claude-agent-sdk` provider needs **no API key** — it
-authenticates through your `claude` CLI login, so the only prerequisite is that the `claude`
-CLI is installed and logged in.
+authenticates through your `claude` CLI login, so the only prerequisite is being logged in to
+the `claude` CLI — the installer offers to install the CLI for you if it's missing.
 
 ## What your agent gets
 
