@@ -36,16 +36,6 @@ trap 'rc=$?; [[ $rc -ne 0 ]] && printf "\n\033[1;31m[install] aborted (exit %s).
 
 case "${1:-}" in -h|--help) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; trap - EXIT; exit 0 ;; esac
 
-# Prefer /dev/tty so prompts work even when stdin is the curl pipe; fall back to stdin. The probe
-# actually opens it — the -r/-w tests pass even with no controlling terminal, then every read fails.
-TTY=/dev/tty; { : <"$TTY"; } 2>/dev/null || TTY=""
-ask() {  # $1 prompt, $2 default → echoes the answer (or default if blank / non-interactive)
-  local ans=""
-  if [[ -n "$TTY" ]]; then printf '\033[36m?\033[0m %s ' "$1" >"$TTY"; IFS= read -r ans <"$TTY" || ans=""
-  else IFS= read -r ans || ans=""; fi
-  printf '%s' "${ans:-$2}"
-}
-
 INSTALL_DIR="${INSTALL_DIR:-$HOME/llm-d-benchmarking-agent}"
 
 find_mcp_root() {  # locate a checkout of THIS repo, from the CWD or the script's own path
@@ -113,7 +103,6 @@ fi
 cd "$PROJECT_DIR"
 REPOS_DIR="${REPOS_DIR:-$(dirname "$PROJECT_DIR")}"   # sibling repos live next to the project
 VENV="$PROJECT_DIR/.venv"
-SERVER_NAME="llm-d-bench"
 log "Engine: $PROJECT_DIR"
 
 SUDO=""; if [[ "$(id -u)" -ne 0 ]] && command -v sudo >/dev/null 2>&1; then SUDO="sudo"; fi
@@ -183,46 +172,34 @@ ensure_env   # create .env from .env.example if missing
 step "LLM provider"
 set_env_var LLM_PROVIDER claude-agent-sdk
 log "Using claude-agent-sdk — no API key (it authenticates through your local 'claude' login)."
-log "(Other providers — anthropic, openai — are planned for a future release.)"
 # claude-agent-sdk can't run without the `claude` CLI: surface an already-installed copy (adds
-# ~/.local/bin to PATH) or offer the official installer. Non-fatal — you can install + log in later.
-ensure_claude_cli || warn "Continuing without the 'claude' CLI — install it and run 'claude auth login' before using the server."
+# ~/.local/bin to PATH) or offer the official installer. Non-fatal (it warns for you) — you can
+# install + log in later.
+ensure_claude_cli || true
 
 # HF_TOKEN (for GATED HF model deploys, e.g. Llama/Gemma) isn't prompted — set it in the project's
 # .env, or pass `-e HF_TOKEN=hf_…` to your client, only if you'll actually deploy a gated model.
 
 if [[ -x "$VENV/bin/llm-d-bench-mcp" ]]; then
-  CMD_ARGV=("$VENV/bin/llm-d-bench-mcp"); CMD_DISPLAY="$VENV/bin/llm-d-bench-mcp"
+  CMD_DISPLAY="$VENV/bin/llm-d-bench-mcp"
 else
-  CMD_ARGV=("$PY" -m llm_d_bench_mcp); CMD_DISPLAY="$PY -m llm_d_bench_mcp"
+  CMD_DISPLAY="$PY -m llm_d_bench_mcp"
 fi
 
-print_claude_code_snippet() {
-  echo; echo "── Claude Code (CLI) ───────────────────────────────"
-  printf '  claude mcp add %s -s user -- %s\n' "$SERVER_NAME" "$CMD_DISPLAY"
-}
-register_claude_code() {
-  if ! command -v claude >/dev/null 2>&1; then
-    warn "The 'claude' CLI is not on PATH — run this later:"; print_claude_code_snippet; return 0
-  fi
-  local scope; scope="$(ask 'Scope? [local|user|project] (default: user):' user)"
-  local args=(mcp add "$SERVER_NAME" -s "$scope" -- "${CMD_ARGV[@]}")
-  if claude "${args[@]}"; then log "Registered with Claude Code (scope: $scope). Check it with 'claude mcp list' or '/mcp' in a session."
-  else warn "'claude mcp add' failed — register manually:"; print_claude_code_snippet; fi
-}
-
 step "Register with Claude Code"
-echo "  0) Claude Code (CLI) — register it for you  (default)"
-echo "  1) Skip — I'll wire it up myself"
-case "$(ask 'Choice [0/1]:' 0 | tr -d '[:space:]')" in
-  1) log "Skipping client registration."; print_claude_code_snippet ;;
-  *) register_claude_code ;;
-esac
+if [[ "$(menu_select 'Register the MCP server with Claude Code?' 0 \
+         'Claude Code (CLI) — register it for you' \
+         "Skip — I'll wire it up myself")" == 0 ]]; then
+  register_mcp_server "$CMD_DISPLAY" "" 1 || true   # INTERACTIVE=1: the helper prompts for scope and, if the CLI is missing, warns with a manual snippet (never fatal)
+else
+  log "Skipping registration — re-run this installer or see $MCP_DIR/README.md to register it later."
+fi
 
 step "Done"
 log "Launch command : $CMD_DISPLAY"
 log "Smoke-test it  : npx @modelcontextprotocol/inspector $CMD_DISPLAY   (lists 35 tools, 5 prompts, knowledge resources)"
 log "Provider/config: $PROJECT_DIR/.env"
+log "Web UI (optional): the browser app is installed too — start it with:  cd $PROJECT_DIR && ./scripts/run.sh --open   → http://127.0.0.1:8000"
 log "The server is stdio/local — it runs on this machine against your kubeconfig. Advisory tools work"
 log "with no cluster; deploy/run tools need a reachable cluster. Mutations are approved in YOUR client's"
 log "own tool-permission prompt. Full details: $MCP_DIR/README.md"

@@ -51,6 +51,10 @@ It is idempotent (safe to re-run). The `claude-agent-sdk` provider needs **no AP
 authenticates through your `claude` CLI login, so the only prerequisite is being logged in to
 the `claude` CLI — the installer offers to install the CLI for you if it's missing.
 
+Because the engine app installs into the same venv, you also get its **web UI** for free — the
+installer's final message prints the exact line to launch it (`./scripts/run.sh --open` →
+http://127.0.0.1:8000).
+
 ## What your agent gets
 
 ### Tools (35)
