@@ -36,8 +36,9 @@ trap 'rc=$?; [[ $rc -ne 0 ]] && printf "\n\033[1;31m[install] aborted (exit %s).
 
 case "${1:-}" in -h|--help) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; trap - EXIT; exit 0 ;; esac
 
-# Prefer /dev/tty so prompts work even when stdin is the curl pipe; fall back to stdin.
-TTY=/dev/tty; { [[ -r $TTY && -w $TTY ]]; } 2>/dev/null || TTY=""
+# Prefer /dev/tty so prompts work even when stdin is the curl pipe; fall back to stdin. The probe
+# actually opens it — the -r/-w tests pass even with no controlling terminal, then every read fails.
+TTY=/dev/tty; { : <"$TTY"; } 2>/dev/null || TTY=""
 ask() {  # $1 prompt, $2 default → echoes the answer (or default if blank / non-interactive)
   local ans=""
   if [[ -n "$TTY" ]]; then printf '\033[36m?\033[0m %s ' "$1" >"$TTY"; IFS= read -r ans <"$TTY" || ans=""
