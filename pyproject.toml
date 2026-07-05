@@ -1,0 +1,82 @@
+[project]
+name = "llm-d-bench-mcp"
+version = "0.1.0"
+description = "Standalone MCP server (stdio) exposing the llm-d-benchmarking-agent's tools, knowledge, and workflow to external MCP clients"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "mcp>=1.28,<2",
+    "anyio>=4",
+    "pydantic>=2.7",
+]
+# The engine — the llm-d-benchmarking-agent's `app` package — is deliberately NOT a pip
+# dependency: it must run from a real checkout (knowledge/, security/allowlist.yaml, and the
+# read-only sibling repos are read from disk at runtime, and a site-packages install would lose
+# them). The installer clones the agent repo at latest main and `pip install -e`s it into the
+# same venv as this package — see scripts/install.sh and README.md.
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-timeout>=2.3",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+# Console entry point for the stdio MCP server, so external clients launch it with a clean
+# command (`<venv>/bin/llm-d-bench-mcp`) instead of the long `python -m llm_d_bench_mcp` path.
+# Same target as `llm_d_bench_mcp/__main__.py`. See README.md.
+llm-d-bench-mcp = "llm_d_bench_mcp.server:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["llm_d_bench_mcp"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+# Per-test hang backstop, mirroring the agent repo's suite: a single hermetic test should never
+# take 60s; pytest-timeout fails it fast WITH a traceback instead of wedging the run.
+timeout = 60
+timeout_method = "signal"
+
+# --- Quality gates: ruff (mirrors the agent repo's ruleset) -------------------
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+# Same modern ruleset as the agent repo; E501 deliberately omitted (the codebase favours longer
+# explanatory lines and enforcing it would be pure churn).
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes (unused imports/names, undefined names)
+    "I",    # isort (import ordering)
+    "B",    # flake8-bugbear (likely bugs)
+    "UP",   # pyupgrade (modern syntax for the pinned py311 floor)
+    "C4",   # flake8-comprehensions
+    "SIM",  # flake8-simplify
+]
+ignore = [
+    "E501",  # line-too-long — existing style keeps explanatory long lines
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests intentionally use patterns ruff flags as "smells" in app code.
+"tests/**" = ["B017", "B011", "SIM117", "C408"]
+
+[tool.ruff.lint.isort]
+# `app` (the agent engine, installed from its own checkout) gets its own import section between
+# third-party and this package, so the import blocks read: stdlib / third-party / app / ours.
+known-first-party = ["llm_d_bench_mcp"]
+section-order = ["future", "standard-library", "third-party", "engine", "first-party", "local-folder"]
+
+[tool.ruff.lint.isort.sections]
+engine = ["app"]
