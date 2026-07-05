@@ -63,12 +63,17 @@ MCP_DIR="$(find_mcp_root || true)"
 if [[ -z "$MCP_DIR" ]]; then
   [[ "${_MCP_BOOTSTRAPPED:-0}" == 1 ]] && die "could not locate the MCP repo after cloning (bootstrap loop)."
   command -v git >/dev/null 2>&1 || die "git is required to fetch the repos — install git and re-run."
+  # Clone the agent monorepo FIRST (git refuses to clone into a non-empty dir, so it must land
+  # before this repo does), then this repo as a sibling inside it.
+  if [[ ! -d "$INSTALL_DIR/.git" ]]; then
+    step "Fetching the agent repo (the engine) → $INSTALL_DIR"
+    git clone "https://github.com/TalBenAmii/llm-d-benchmarking-agent" "$INSTALL_DIR"
+  fi
   MCP_DIR="$INSTALL_DIR/llm-d-bench-mcp"   # live as a sibling of the agent project
   if [[ -d "$MCP_DIR/.git" ]]; then
     log "MCP repo already cloned at $MCP_DIR — reusing it."
   else
     step "Fetching llm-d-bench-mcp → $MCP_DIR"
-    mkdir -p "$INSTALL_DIR"
     git clone "https://github.com/TalBenAmii/llm-d-bench-mcp" "$MCP_DIR"
   fi
   [[ -f "$MCP_DIR/scripts/install.sh" ]] || die "cloned repo is missing $MCP_DIR/scripts/install.sh"
