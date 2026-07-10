@@ -34,7 +34,7 @@ deferred to local/stdio single-user.
   runs. The SessionPlan gate (`validate_plan`, `session_plan.py:141`) is unchanged.
 - **The mutating→approval gate is the guardrail** (rule 5). The allowlist
   (`security/allowlist.yaml`) + `Allowlist.validate()` (`app/security/allowlist.py:191`) +
-  `classify_shell_command()` (`app/tools/shell.py:130`) still run on every command. What changes is
+  `classify_shell_command()` (`app/tools/run/shell.py:130`) still run on every command. What changes is
   only where the human approval comes from (§5): the connecting client's per-tool-call permission
   prompt, plus optional elicitation for the richer SessionPlan confirmation.
 - **Secrets stay in the backend** (rule 6). The server process holds env (e.g. `HF_TOKEN`); the

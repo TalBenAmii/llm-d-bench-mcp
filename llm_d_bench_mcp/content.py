@@ -16,7 +16,7 @@ from mcp.server.lowlevel.helper_types import ReadResourceContents
 from pydantic import AnyUrl
 
 from app.agent.prompt import _one_line_purpose
-from app.tools.knowledge_access import EXCLUDED_KNOWLEDGE_FILES
+from app.tools.access.knowledge_access import EXCLUDED_KNOWLEDGE_FILES
 
 if TYPE_CHECKING:
     from mcp.server.lowlevel import Server
