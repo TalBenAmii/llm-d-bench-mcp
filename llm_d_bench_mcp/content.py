@@ -35,7 +35,7 @@ _HOST = "knowledge"
 def _knowledge_files(knowledge_dir: Path) -> list[Path]:
     files: list[Path] = []
     for pattern in ("*.md", "*.yaml", "*.yml"):
-        files.extend(knowledge_dir.glob(pattern))
+        files.extend(knowledge_dir.rglob(pattern))
     files = [f for f in files if f.name not in EXCLUDED_KNOWLEDGE_FILES]
     return sorted(files, key=lambda p: p.stem)
 
@@ -165,13 +165,15 @@ _BY_NAME = {p.name: p for p in _PROMPTS}
 
 
 def _load_playbooks(knowledge_dir: Path, names: tuple[str, ...]) -> str:
+    # Playbooks are named by basename; resolve each through the recursive knowledge index so
+    # the topic-folder layout is transparent here (basenames stay globally unique).
+    by_name = {f.name: f for f in _knowledge_files(knowledge_dir)}
     chunks: list[str] = []
     for name in names:
-        try:
-            body = (knowledge_dir / name).read_text(encoding="utf-8")
-        except OSError:
+        path = by_name.get(name)
+        if path is None:
             continue
-        chunks.append(f"## {name}\n\n{body}")
+        chunks.append(f"## {name}\n\n{path.read_text(encoding='utf-8')}")
     return "\n\n".join(chunks)
 
 
