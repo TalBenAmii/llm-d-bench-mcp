@@ -5,7 +5,8 @@
 > (ruff + pytest) is the authoritative green check. This doc stays the design of record; the file-level
 > detail below reflects the built code, with one noted deviation in §4 (the per-connection context is
 > built directly in `adapters.py` rather than via a shared `main.py` helper). It follows the
-> locked decisions in the agent repo's `docs/history/proposals/05-mcp-server.md` §9.
+> locked decisions in the agent repo's `docs/history/proposals/05-mcp-server.md` §9 (that doc now
+> lives in the agent repo's git history only — `docs/history/` was removed 2026-07-10).
 >
 > **2026-07-05: split into its own repo.** The package moved from the agent repo's `app/mcp/` to this
 > repo as `llm_d_bench_mcp/` (fresh history; same code, re-homed imports). The engine is NOT vendored:
