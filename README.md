@@ -15,10 +15,6 @@ It is the agent's toolset re-exposed over the Model Context Protocol: 35 tools, 
 prompts, and the agent's entire knowledge base (60+ playbooks and heuristics) as readable
 resources, so a generic agent behaves like a benchmarking expert rather than a blank slate.
 
-> Transport is stdio / local single-user: the server runs on your machine against your
-> kubeconfig, trusted like any local tool you launch. There is no network/remote mode (see
-> [Security & scope](#security--scope)).
-
 ## How it fits together
 
 This repo is the thin MCP adapter (~500 lines: transport + approval/event adapters + the
@@ -31,9 +27,9 @@ repos from disk at runtime), which is why it is not a pip dependency.
 
 ## Install (one command)
 
-The installer fetches the agent repo (the engine), clones the read-only sibling repos, builds
-a virtualenv, installs the engine + this server into it, configures the `claude-agent-sdk`
-provider, and registers the server with Claude Code (or prints the config to paste yourself):
+The installer fetches the engine + sibling repos, builds one venv with both packages,
+configures the `claude-agent-sdk` provider, and registers the server with Claude Code (or
+prints the config to paste yourself):
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/TalBenAmii/llm-d-bench-mcp/main/scripts/install.sh)
@@ -47,13 +43,10 @@ cd llm-d-bench-mcp
 ./scripts/install.sh
 ```
 
-It is idempotent (safe to re-run). The `claude-agent-sdk` provider needs no API key: it
-authenticates through your `claude` CLI login, so the only prerequisite is being logged in to
-the `claude` CLI. The installer offers to install the CLI for you if it's missing.
-
-Because the engine app installs into the same venv, you also get its web UI for free; the
-installer's final message prints the exact line to launch it (`./scripts/run.sh --open` →
-http://127.0.0.1:8000).
+It is idempotent (safe to re-run); the only prerequisite is being logged in to the `claude`
+CLI (no API key — see Requirements; the installer offers to install the CLI if it's missing).
+Because the engine app lands in the same venv you also get its web UI for free — the
+installer's final message prints the launch line (`./scripts/run.sh --open` → http://127.0.0.1:8000).
 
 ## What your agent gets
 
@@ -92,9 +85,8 @@ plan, run only with approval") that capable clients fold into their system promp
 
 ## Manual config (Claude Code)
 
-The installer does this for you; here's the block to wire it up by hand. The launch command is
-the console entry point created by installing this package. Use its absolute path in the
-agent project's venv (the installer builds everything into that one venv):
+The installer does this for you. By hand, register the console entry point by its absolute
+path in the agent project's venv (the installer builds everything into that one venv):
 
 ```bash
 claude mcp add llm-d-bench -s user -- /ABS/PATH/llm-d-benchmarking-agent-project/.venv/bin/llm-d-bench-mcp
@@ -103,17 +95,9 @@ claude mcp add llm-d-bench -s user -- /ABS/PATH/llm-d-benchmarking-agent-project
 
 A gated-model `HF_TOKEN` is optional; add it with `-e HF_TOKEN=hf_xxx`. The agent project's
 `.env` already carries the LLM provider config and is loaded regardless of how the server is
-launched. The module form works too once both packages are installed in the venv:
-
-```bash
-claude mcp add llm-d-bench -s user -- /ABS/PATH/.venv/bin/python -m llm_d_bench_mcp
-```
-
-Smoke-test it without a client using the official inspector:
-
-```bash
-npx @modelcontextprotocol/inspector /ABS/PATH/.venv/bin/llm-d-bench-mcp
-```
+launched. The module form (`.../.venv/bin/python -m llm_d_bench_mcp`) works too once both
+packages are installed in the venv. Smoke-test it without a client using the official
+inspector: `npx @modelcontextprotocol/inspector /ABS/PATH/.venv/bin/llm-d-bench-mcp`.
 
 ## Requirements & scope
 
@@ -123,8 +107,8 @@ npx @modelcontextprotocol/inspector /ABS/PATH/.venv/bin/llm-d-bench-mcp
 - No cluster needed for the advisory tools and knowledge resources. The
   deploy/run/orchestrate tools need a reachable Kubernetes cluster + `kubeconfig` (and
   `HF_TOKEN` for gated models).
-- The engine repo and its read-only siblings (`llm-d`, `llm-d-benchmark`, `llm-d-skills`) must
-  be on disk; the installer clones them all automatically.
+- The engine repo and its read-only siblings (`llm-d`, `llm-d-benchmark`, `llm-d-skills`) —
+  the installer clones them all automatically.
 
 ## Security & scope
 
