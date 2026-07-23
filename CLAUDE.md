@@ -35,7 +35,7 @@ llm-d-bench-mcp/
 5. **SDK pin:** `mcp>=1.28,<2`, low-level `mcp.server.lowlevel.Server` (not `FastMCP`, not the v2
    on the SDK's `main` branch). camelCase `inputSchema`/`mimeType` on the `types.*` models.
 6. **The engine is a checkout, not a pip dep** — `app.*` must import from a real
-   llm-d-benchmarking-agent checkout (its `knowledge/`, allowlist, and sibling repos are read
+   llm-d-benchmarking-agent checkout (its `knowledge/`, command policy, and sibling repos are read
    from disk at runtime). The installer clones the agent repo at **latest `main`** and
    `pip install -e`s it into the same venv as this package. Never vendor engine code here.
 

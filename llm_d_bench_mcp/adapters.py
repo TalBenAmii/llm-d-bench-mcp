@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from app.agent.lifecycle import RunRegistry
 from app.config import Settings
-from app.security.allowlist import Allowlist
+from app.security.policy import CommandPolicy
 from app.security.runner import CommandRunner
 from app.tools.context import ApproveFn, EmitFn, ToolContext
 
@@ -109,7 +109,7 @@ def _safe(payload: dict[str, Any]) -> dict[str, Any]:
 # --- context — build the single per-connection ``ToolContext`` for the MCP server --------------
 # A stdio server process serves exactly one client connection, so "one Session per connection"
 # collapses to one ``ToolContext`` per process, built lazily and reused. This mirrors the
-# shared-dependency construction in the agent repo's ``app/main.py`` startup (allowlist / runner /
+# shared-dependency construction in the agent repo's ``app/main.py`` startup (policy / runner /
 # semaphore / RunRegistry, ~``main.py:90-108``); it is built fresh here because the MCP process has
 # no FastAPI ``app.state``. Kept deliberately parallel — if that construction changes, change it
 # here too.
@@ -121,7 +121,7 @@ def build_connection_context(settings: Settings, *, server: Server) -> ToolConte
     )
     ctx = ToolContext(
         settings=settings,
-        allowlist=Allowlist.from_file(settings.allowlist_path),
+        policy=CommandPolicy.from_file(settings.command_policy_path),
         runner=CommandRunner(settings.repo_paths, extra_env=settings.extra_subprocess_env),
         workspace=settings.resolved_workspace_dir / "mcp" / session_id,
         run_semaphore=run_semaphore,

@@ -18,11 +18,11 @@ resources, so a generic agent behaves like a benchmarking expert rather than a b
 ## How it fits together
 
 This repo is the thin MCP adapter (~500 lines: transport + approval/event adapters + the
-knowledge-exposure surface). The engine (the 35 tools, the security allowlist, and the
+knowledge-exposure surface). The engine (the 35 tools, the command policy, and the
 `knowledge/` playbooks) lives in the
 [llm-d-benchmarking-agent](https://github.com/TalBenAmii/llm-d-benchmarking-agent) repo, which
 the installer clones at its latest `main` and installs into the same virtualenv. The engine
-must run from a real checkout (it reads `knowledge/`, the allowlist, and the read-only sibling
+must run from a real checkout (it reads `knowledge/`, the command policy, and the read-only sibling
 repos from disk at runtime), which is why it is not a pip dependency.
 
 ## Install (one command)

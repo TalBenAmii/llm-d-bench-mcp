@@ -11,7 +11,7 @@ dependencies = [
     "pydantic>=2.7",
 ]
 # The engine — the llm-d-benchmarking-agent's `app` package — is deliberately NOT a pip
-# dependency: it must run from a real checkout (knowledge/, security/allowlist.yaml, and the
+# dependency: it must run from a real checkout (knowledge/, security/command_policy.yaml, and the
 # read-only sibling repos are read from disk at runtime, and a site-packages install would lose
 # them). The installer clones the agent repo at latest main and `pip install -e`s it into the
 # same venv as this package — see scripts/install.sh and README.md.

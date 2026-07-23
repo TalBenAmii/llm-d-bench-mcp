@@ -2,7 +2,7 @@
 
 The agent (the engine this adapter re-exposes) must be importable as ``app`` — the installer and
 the dev setup both `pip install -e` the agent repo into the same venv as this package. Paths
-(knowledge/, the allowlist) resolve through the agent's own settings, so the suite works wherever
+(knowledge/, the command policy) resolve through the agent's own settings, so the suite works wherever
 that checkout lives.
 """
 from __future__ import annotations
@@ -24,11 +24,11 @@ get_settings.cache_clear()
 @pytest.fixture()
 def tool_ctx(tmp_path):
     """A ToolContext wired to the real repos but an isolated temp workspace."""
-    from app.security.allowlist import Allowlist
+    from app.security.policy import CommandPolicy
     from app.security.runner import CommandRunner
     from app.tools.context import ToolContext
 
     s = get_settings()
-    al = Allowlist.from_file(s.allowlist_path)
+    policy = CommandPolicy.from_file(s.command_policy_path)
     runner = CommandRunner(s.repo_paths)
-    return ToolContext(settings=s, allowlist=al, runner=runner, workspace=tmp_path / "ws")
+    return ToolContext(settings=s, policy=policy, runner=runner, workspace=tmp_path / "ws")
