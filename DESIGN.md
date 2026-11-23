@@ -9,8 +9,8 @@
 > repo's git history — `docs/history/` was removed 2026-07-10). The engine is NOT vendored (see the
 > README's "How it fits together"); the `app.*` import surface this adapter uses is guarded by an
 > import-surface smoke test in the agent repo's suite, and `app/...` references below point into the
-> engine checkout. Manual smoke over stdio (MCP Inspector / Claude Code) is still recommended before
-> relying on it against a real client — the README has the command.
+> engine checkout. For a read-only connection check with Codex CLI or Claude Code,
+> see the [installation instructions](README.md#install-one-command).
 
 Decisions this implements (from proposal 05 §9): full operator (all functional tools, incl. mutating),
 judgment shipped as MCP resources + prompts + server `instructions`, stdio transport, one `Session`
@@ -29,10 +29,10 @@ local/stdio single-user (§11).
 
 ## 1. Goal and what ships
 
-A standalone process, launched by an MCP client (Claude Desktop, Claude Code, Cursor) over stdio,
+A standalone process, launched by Codex CLI or Claude Code over local stdio,
 exposing three MCP surfaces backed by the existing app: **tools** (the functional tools from
 `REGISTRY` — probe, plan, deploy, run, orchestrate, analyze, tear down), **resources** (every
-`knowledge/*.md|*.yaml` file, 50 files — the same playbooks our agent reads), and **prompts**
+eligible Markdown or YAML file under `knowledge/`, including topic subdirectories), and **prompts**
 (workflow entry points that inject the relevant playbook + the workflow shape). Plus the
 server-level `instructions` string (role + workflow), advertised at `initialize`, so even a client
 that never fetches a resource inherits the basic "how this agent behaves" shape.
@@ -92,13 +92,10 @@ The `Session` object is optional for v1: most fields are web-UI bookkeeping and 
 
 `ToolContext.request_approval` (`ApproveFn`) is called with `kind ∈ {"command", "session_plan"}`.
 
-**`kind == "command"` → return `True` (client already gated the call).** Every `tools/call` is
-independently prompted by the connecting client's permission system before the handler runs, so by
-the time a handler reaches `ctx.run_command()`, the user has already allowed this tool invocation.
-This is the "works freely like a normal local agent" decision, not a silent auto-approve: the human
-checkpoint is the client's per-call prompt, and a single tool call maps to a single user permission
-(a tool that internally runs several commands still corresponds to one user-approved invocation,
-which is the right granularity).
+**Command approval.** For `kind == "command"`, the adapter returns `True`. The connecting
+client controls permission for the tool invocation, which may run several commands. A new
+Codex registration sets `default_tools_approval_mode = "prompt"`. Users with an existing
+registration control prompting through their current client settings.
 
 **`kind == "session_plan"` → elicitation, sentinel fallback.** The plan is inert (it mutates
 nothing), so the safety here is confirmation quality, not gating a mutation. Where the client
@@ -124,8 +121,8 @@ wrap and swallow (a dropped progress line is not a tool failure).
 
 Publish every knowledge file as an MCP resource under `doc://knowledge/<stem>`. Source of truth is
 the same glob the prompt builder uses (`_knowledge_sections` in `app/agent/prompt.py`):
-`knowledge/*.md|*.yaml|*.yml` minus `EXCLUDED_KNOWLEDGE_FILES` (`CLAUDE.md`, `README.md`) — 50 files
-today. Descriptions reuse the prompt builder's one-line purpose extractor; mime type by suffix.
+Markdown and YAML files under `knowledge/` (recursive), excluding `EXCLUDED_KNOWLEDGE_FILES`
+(`CLAUDE.md`, `README.md`). Descriptions reuse the prompt builder's one-line purpose extractor; mime type by suffix.
 `_resolve_knowledge_uri` must reject any URI resolving outside `knowledge/` (path-traversal guard;
 read-only, but still). Declaring `@list_resources()` is what advertises the `resources` capability.
 
@@ -164,19 +161,15 @@ judgment; mutations are gated by the client. Exact text in `content.py`.
 `main()` runs the stdio loop; `__main__.py` makes `python -m llm_d_bench_mcp` work;
 `[project.scripts]` adds the `llm-d-bench-mcp` console command. Dependency: `mcp>=1.28,<2` — pinned
 away from the in-development v2 on `main`, which has an incompatible constructor-callback API.
-Python ≥3.10 (already the project floor) is what `mcp` requires.
+Both packages require Python 3.11 or later.
 
-Client registration (Claude Desktop `claude_desktop_config.json` / Claude Code `.mcp.json`),
-identical stdio block:
-
-```json
-{ "mcpServers": { "llm-d-bench": {
-    "command": "python", "args": ["-m", "llm_d_bench_mcp"],
-    "env": { "HF_TOKEN": "${HF_TOKEN}" }
-} } }
-```
-
-Secrets go in `env` (expanded at launch), never in `args`.
+Both clients launch the same executable from the agent project's virtual environment.
+`scripts/install.sh` defaults to Claude Code and uses the shared Claude registration helper.
+With `--client codex` it calls `scripts/register_codex.py` to register `llm-d-bench` in the
+user's Codex TOML configuration. A fresh entry sets a 30-second startup timeout, a
+one-hour tool timeout, and per-tool approval prompts. A matching command and arguments
+preserve the existing entry. A different command or arguments produce a registration error.
+See the [README](README.md#manual-config-codex-cli) for manual setup.
 
 ## 11. Security posture (deferred, on the record)
 
@@ -185,16 +178,18 @@ Per decision 05 §9.6 / §8, v1 targets local single-user / stdio:
 - No connection authn/authz, no per-caller credential scoping, no network listener (stdio only).
 - Still enforced (free, pure): the allowlist + mutating classifier on every command; subprocess env
   scrubbing; the read-only path for read-only tools.
-- The human gate is the connecting client's per-tool-call permission prompt (§5).
+- The client controls tool-call permissions (§5).
 
 **This is acceptable ONLY for local/stdio use. Before any HTTP / shared / remote transport, "who may
 connect, whose credentials, what is the blast radius" become blocking, not deferred.** Flagged loudly
 so the deferral stays a choice.
 
-## 12. Tests (`tests/test_mcp_server.py`)
+## 12. Tests
 
-17 hermetic tests (no live cluster, no LLM, no network) in one flat file, matching the house
-`tests/test_*.py` convention. They cover: `list_tools` mirroring the registry (`load_tools` absent),
+`tests/test_installer.py` covers client selection, curl bootstrap, Codex registration,
+existing settings, and the default Claude Code path.
+
+`tests/test_mcp_server.py` exercises the server without a live cluster, LLM, or network. It covers: `list_tools` mirroring the registry (`load_tools` absent),
 `call_tool` dispatch and invalid-args error surfacing, both approval kinds (command auto-true;
 session-plan elicit accept/decline plus the sentinel fallback), resources matching the knowledge
 glob with traversal rejection, prompt listing/embedding, and non-empty web-UI-free instructions.

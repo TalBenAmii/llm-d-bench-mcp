@@ -1,7 +1,7 @@
 # llm-d-bench-mcp — standalone MCP server (stdio) for the llm-d-benchmarking-agent
 
 > The **thin MCP adapter** split out of the agent repo: it re-exposes the agent's tools +
-> knowledge + workflow to *other people's* MCP clients (Claude Desktop, Claude Code, Cursor).
+> knowledge + workflow to Codex CLI and Claude Code over local stdio.
 > Pure mechanism: it imports the engine (`app.*`) from the
 > [llm-d-benchmarking-agent](https://github.com/TalBenAmii/llm-d-benchmarking-agent) checkout —
 > the judgment ships as MCP resources/prompts/server-`instructions` sourced from the agent's
@@ -29,8 +29,8 @@ llm-d-bench-mcp/
    in the agent repo's `knowledge/` and is exposed, never duplicated.
 2. **Reuse, don't fork** — `list_tools` mirrors the agent's `tool_definitions()`; `call_tool` →
    `run_tool` → the shared `dispatch()`. Don't re-implement validation or handlers here.
-3. **The approval gate is re-homed, not removed** (`adapters.py`) — never a silent auto-approve of a
-   mutation; the re-homing mechanism → `DESIGN.md` §5.
+3. **The approval gate is re-homed, not removed** (`adapters.py`) — the client's tool permissions govern
+   each invocation and its commands. See `DESIGN.md` §5.
 4. **Security deferred to local/stdio single-user** (`DESIGN.md` §11) — acceptable only over
    stdio; revisit before any HTTP/shared transport.
 5. **SDK pin:** `mcp>=1.28,<2`, low-level `mcp.server.lowlevel.Server` (not `FastMCP`, not the v2

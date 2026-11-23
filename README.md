@@ -6,14 +6,9 @@ stack, run the benchmark, and explain the results. It reuses the tools and valid
 the [llm-d-benchmarking-agent](https://github.com/TalBenAmii/llm-d-benchmarking-agent)
 app; tool permissions are controlled by the connecting client.
 
-> Supported setup paths: Claude Code and Codex CLI over local stdio. The installer still
-> configures Claude Code by default; pass `--client codex` for Codex. For an existing
-> installation, you can also use the [manual Codex setup](#manual-config-codex-cli).
-> Other MCP clients are not verified here.
-
-The MCP host supplies the model, login and conversation. The server executes tool calls;
-it does not start its own Claude or Codex agent loop. Changing MCP clients does not require
-changing the web application's `LLM_PROVIDER`.
+The supported clients are Claude Code and Codex CLI over local stdio. Your CLI supplies
+the model and login, runs the conversation, and controls tool permissions. You can use the
+server independently of the browser app.
 
 It is the agent's toolset re-exposed over the Model Context Protocol: 35 tools, 5 workflow
 prompts, and the agent's entire knowledge base (60+ playbooks and heuristics) as readable
@@ -31,39 +26,41 @@ repos from disk at runtime), which is why it is not a pip dependency.
 
 ## Install (one command)
 
-The installer fetches the engine + sibling repos, builds one venv with both packages,
-and registers the server with your selected client. The default Claude Code path also
-configures the optional web application's `claude-agent-sdk` provider:
+Choose the command for your client. Both install the agent and server in one virtual
+environment and fetch the sibling repositories that provide the benchmark catalog.
+
+**Codex CLI.** Install `codex` first (on `PATH` or in `~/.local/bin`) and use your Codex login.
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/TalBenAmii/llm-d-bench-mcp/main/scripts/install.sh) --client codex
+codex mcp get llm-d-bench
+```
+
+Start a new Codex session and open `/mcp` to verify that `llm-d-bench` is connected. Ask
+“Use llm-d-bench to list the available benchmark harnesses.” A fresh registration prompts
+for each tool call and sets a one-hour tool timeout. The installer preserves a matching
+registration's settings and reports a conflict if the launch command differs.
+
+**Claude Code (default).** Run the installer and choose the registration scope when
+prompted. It offers to install the Claude CLI if needed and configures the optional
+browser app to use the Claude Agent SDK.
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/TalBenAmii/llm-d-bench-mcp/main/scripts/install.sh)
+claude mcp list
 ```
 
-Prefer to clone first? The same script runs from inside a checkout:
+To run the installer from a checkout, clone the repository and choose the same client.
 
 ```bash
 git clone https://github.com/TalBenAmii/llm-d-bench-mcp.git
 cd llm-d-bench-mcp
-./scripts/install.sh
+./scripts/install.sh --client codex  # omit the flag for Claude Code
 ```
 
-For Codex, install Codex CLI first, then select it explicitly:
-
-```bash
-./scripts/install.sh --client codex
-# Or without cloning this repo first:
-bash <(curl -fsSL https://raw.githubusercontent.com/TalBenAmii/llm-d-bench-mcp/main/scripts/install.sh) --client codex
-```
-
-The Codex path registers the same server with tool approval prompts and a one-hour tool
-timeout. It preserves an existing matching registration, including custom settings, and
-reports a conflicting command instead of overwriting it. It does not require Claude or
-change the web application's `.env`. Start a new Codex session and use `/mcp` to connect.
-
-Use your selected client's own login for conversations. The Claude Code path offers to
-install its CLI if missing; the Codex path requires `codex` on PATH (or in `~/.local/bin`).
-Because the engine app lands in the same venv you also get its web UI for free — the
-installer's final message prints the launch line (`./scripts/run.sh --open` → http://127.0.0.1:8000).
+The installer also prints the optional browser app's launch command, `./scripts/run.sh --open`,
+to run from the agent project directory. If the agent's local installer already installed the server,
+you can register the existing executable using the [manual Codex setup](#manual-config-codex-cli).
 
 ## What your agent gets
 
@@ -125,8 +122,9 @@ codex mcp add llm-d-bench -- /ABS/PATH/llm-d-benchmarking-agent-project/.venv/bi
 codex mcp get llm-d-bench
 ```
 
-In `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`), add these settings to the
-generated server section. Keep the absolute `command` path written by `codex mcp add`:
+Edit the existing `[mcp_servers.llm-d-bench]` section in `~/.codex/config.toml`
+(or `$CODEX_HOME/config.toml`). Keep the absolute `command` path from `codex mcp add`
+and set the timeouts and approval mode as shown.
 
 ```toml
 [mcp_servers.llm-d-bench]
