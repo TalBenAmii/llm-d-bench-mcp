@@ -18,7 +18,8 @@ llm-d-bench-mcp/
 │  ├─ adapters.py       per-connection adapters: one ToolContext per stdio connection + ApproveFn + EmitFn
 │  └─ content.py        knowledge exposure: doc://knowledge/<stem> resources + workflow prompts + server INSTRUCTIONS
 ├─ tests/               pytest suite (hermetic; needs the agent repo importable — see below)
-├─ scripts/install.sh   the one-command installer (curl-able); clones the agent repo at latest main
+├─ scripts/install.sh   installer (curl-able); --client codex or default claude-code; engine at latest main
+├─ scripts/register_codex.py  Codex config registration; preserves matching entries and unrelated settings
 ├─ README.md            user-facing docs (install, tools, prompts, security)
 └─ DESIGN.md            the implementation spec / design of record
 ```

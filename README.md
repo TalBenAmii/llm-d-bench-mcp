@@ -1,15 +1,19 @@
 # llm-d-bench-mcp: the llm-d benchmarking MCP server
 
-Give Claude Code the ability to benchmark `llm-d` from plain English. Point it at this
+Give Claude Code or Codex CLI the ability to benchmark `llm-d` from plain English. Point it at this
 server and it can probe a cluster, propose a benchmark plan you approve, deploy an `llm-d`
-stack, run the benchmark, and explain the results, inside the same security sandbox and
-approval gates as the [llm-d-benchmarking-agent](https://github.com/TalBenAmii/llm-d-benchmarking-agent)
-app.
+stack, run the benchmark, and explain the results. It reuses the tools and validation from
+the [llm-d-benchmarking-agent](https://github.com/TalBenAmii/llm-d-benchmarking-agent)
+app; tool permissions are controlled by the connecting client.
 
-> Supported now: the `claude-agent-sdk` provider (no API key) wired into Claude Code
-> (the CLI), the only path the installer sets up and verifies. The server speaks standard
-> MCP, so other providers (`anthropic`, `openai`) and clients (Claude Desktop, Cursor, VS
-> Code, OpenAI Codex CLI) are planned for a future release.
+> Supported setup paths: Claude Code and Codex CLI over local stdio. The installer still
+> configures Claude Code by default; pass `--client codex` for Codex. For an existing
+> installation, you can also use the [manual Codex setup](#manual-config-codex-cli).
+> Other MCP clients are not verified here.
+
+The MCP host supplies the model, login and conversation. The server executes tool calls;
+it does not start its own Claude or Codex agent loop. Changing MCP clients does not require
+changing the web application's `LLM_PROVIDER`.
 
 It is the agent's toolset re-exposed over the Model Context Protocol: 35 tools, 5 workflow
 prompts, and the agent's entire knowledge base (60+ playbooks and heuristics) as readable
@@ -28,8 +32,8 @@ repos from disk at runtime), which is why it is not a pip dependency.
 ## Install (one command)
 
 The installer fetches the engine + sibling repos, builds one venv with both packages,
-configures the `claude-agent-sdk` provider, and registers the server with Claude Code (or
-prints the config to paste yourself):
+and registers the server with your selected client. The default Claude Code path also
+configures the optional web application's `claude-agent-sdk` provider:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/TalBenAmii/llm-d-bench-mcp/main/scripts/install.sh)
@@ -43,8 +47,21 @@ cd llm-d-bench-mcp
 ./scripts/install.sh
 ```
 
-It is idempotent (safe to re-run); the only prerequisite is being logged in to the `claude`
-CLI (no API key — see Requirements; the installer offers to install the CLI if it's missing).
+For Codex, install Codex CLI first, then select it explicitly:
+
+```bash
+./scripts/install.sh --client codex
+# Or without cloning this repo first:
+bash <(curl -fsSL https://raw.githubusercontent.com/TalBenAmii/llm-d-bench-mcp/main/scripts/install.sh) --client codex
+```
+
+The Codex path registers the same server with tool approval prompts and a one-hour tool
+timeout. It preserves an existing matching registration, including custom settings, and
+reports a conflicting command instead of overwriting it. It does not require Claude or
+change the web application's `.env`. Start a new Codex session and use `/mcp` to connect.
+
+Use your selected client's own login for conversations. The Claude Code path offers to
+install its CLI if missing; the Codex path requires `codex` on PATH (or in `~/.local/bin`).
 Because the engine app lands in the same venv you also get its web UI for free — the
 installer's final message prints the launch line (`./scripts/run.sh --open` → http://127.0.0.1:8000).
 
@@ -54,7 +71,7 @@ installer's final message prints the launch line (`./scripts/run.sh --open` → 
 
 | Group | What your agent can do | Examples |
 |---|---|---|
-| Sense & ground *(read-only, auto-run)* | Inspect the environment, GPUs, catalog, docs, knowledge | `probe_environment`, `advise_accelerators`, `list_catalog`, `discover_stack`, `search_knowledge`, `read_knowledge`, `fetch_key_docs`, `read_repo_doc` |
+| Sense & ground *(read-only)* | Inspect the environment, GPUs, catalog, docs, knowledge | `probe_environment`, `advise_accelerators`, `list_catalog`, `discover_stack`, `search_knowledge`, `read_knowledge`, `fetch_key_docs`, `read_repo_doc` |
 | Plan before you spend | Map a use case to a validated plan; check it fits | `propose_session_plan`, `check_capacity`, `estimate_run_duration`, `write_and_validate_config`, `generate_doe_experiment` |
 | Deploy & run *(approval-gated)* | Set up repos, run the CLI, orchestrate Jobs & sweeps | `ensure_repos`, `run_setup`, `execute_llmdbenchmark`, `orchestrate_benchmark_run`, `orchestrate_sweep`, `provision_hf_secret` |
 | Make sense of results *(read-only)* | Parse reports, compare runs/harnesses, track trends | `locate_and_parse_report`, `analyze_results`, `compare_reports`, `compare_harness_runs`, `aggregate_runs`, `result_history` |
@@ -99,11 +116,45 @@ launched. The module form (`.../.venv/bin/python -m llm_d_bench_mcp`) works too 
 packages are installed in the venv. Smoke-test it without a client using the official
 inspector: `npx @modelcontextprotocol/inspector /ABS/PATH/.venv/bin/llm-d-bench-mcp`.
 
+## Manual config (Codex CLI)
+
+Reuse the same installed server executable as Claude Code:
+
+```bash
+codex mcp add llm-d-bench -- /ABS/PATH/llm-d-benchmarking-agent-project/.venv/bin/llm-d-bench-mcp
+codex mcp get llm-d-bench
+```
+
+In `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`), add these settings to the
+generated server section. Keep the absolute `command` path written by `codex mcp add`:
+
+```toml
+[mcp_servers.llm-d-bench]
+command = "/ABS/PATH/llm-d-benchmarking-agent-project/.venv/bin/llm-d-bench-mcp"
+startup_timeout_sec = 30
+tool_timeout_sec = 3600
+default_tools_approval_mode = "prompt"
+```
+
+The longer timeout accommodates benchmark calls. Explicit tool prompts preserve the
+adapter's reliance on client approval. See the [Codex MCP configuration reference](https://developers.openai.com/codex/mcp/)
+for these settings. Use a current Codex CLI that supports them.
+
+Start a new `codex` session, sign in if needed, and use `/mcp` to check `llm-d-bench`.
+Try: "Which benchmark harnesses are available? Don't change anything."
+Approve the read-only catalog call when prompted. Tools and knowledge resources use the
+same Python handlers as Claude Code; MCP prompt availability depends on the client UI.
+
+No web server is required. This registration leaves the Claude Code configuration and
+the web application's `.env` unchanged. Adding Codex to an installed server does not
+require rerunning the full installer.
+
 ## Requirements & scope
 
 - Python ≥ 3.11 and `git` (the installer handles the venv via `uv`, or `python3 -m venv`).
-- LLM provider: `claude-agent-sdk`. No API key; authenticated via your `claude` CLI login.
-- Client: Claude Code (the CLI).
+- Client: Claude Code or Codex CLI, authenticated through that client's own login.
+- The MCP server needs no separate model-provider credentials. The web application's
+  provider configuration applies only when using the web application.
 - No cluster needed for the advisory tools and knowledge resources. The
   deploy/run/orchestrate tools need a reachable Kubernetes cluster + `kubeconfig` (and
   `HF_TOKEN` for gated models).
@@ -116,10 +167,11 @@ inspector: `npx @modelcontextprotocol/inspector /ABS/PATH/.venv/bin/llm-d-bench-
   auth; it acts with your own kubeconfig. This is acceptable only for local use.
   HTTP/remote/shared transport is deliberately deferred, and "who may connect, whose
   credentials, what blast radius" become blocking questions before any such mode.
-- Approval is re-homed to your client. Every tool call is gated by your MCP client's own
-  tool-permission prompt; the richer `SessionPlan` approval uses MCP elicitation where the
-  client supports it (with a graceful fallback otherwise). Nothing mutating runs without your
-  say-so; never a silent auto-approve.
+- Approval is handled by your client. The adapter treats an allowed tool invocation as
+  command approval, so configure the client's tool permissions accordingly. The Codex setup
+  above explicitly requests a prompt for each call. `SessionPlan` approval uses MCP
+  elicitation where supported; if unavailable or unsuccessful, the inert plan is accepted
+  and downstream operations rely on client tool permissions.
 
 Design of record and rationale: [`DESIGN.md`](DESIGN.md). The engine / full agent:
 [llm-d-benchmarking-agent](https://github.com/TalBenAmii/llm-d-benchmarking-agent).

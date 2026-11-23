@@ -1,22 +1,19 @@
 #!/usr/bin/env bash
 # install.sh — one interactive command to install the llm-d-bench MCP server and register it
-# with Claude Code (the CLI).
+# with Claude Code (the default) or Codex CLI (--client codex).
 #
 # It does everything end-to-end:
 #   1. fetches this repo + the llm-d-benchmarking-agent repo (the engine, at latest main)
 #   2. clones the read-only sibling repos (llm-d / llm-d-benchmark / llm-d-skills)
 #   3. builds a .venv and installs the engine + this server (`pip install -e` both → the
 #      `llm-d-bench-mcp` command)
-#   4. configures the claude-agent-sdk provider (no API key — uses your local `claude` login) + writes .env
-#   5. registers the server with Claude Code (or just prints the config for you to paste)
-#
-# Scope (for now): the only verified path is the claude-agent-sdk provider + the Claude Code CLI
-# client. Other providers (anthropic, openai) and clients (Claude Desktop, Cursor, VS Code, Codex
-# CLI) are planned for a future release — see README.md.
+#   4. for Claude Code, configures the optional web app's claude-agent-sdk provider
+#   5. registers the server with the selected client; Codex leaves the web app's .env alone
 #
 # Usage:
 #   bash <(curl -fsSL https://raw.githubusercontent.com/TalBenAmii/llm-d-bench-mcp/main/scripts/install.sh)
 #   ./scripts/install.sh            # same script, run from inside a checkout
+#   ./scripts/install.sh --client codex   # requires Codex CLI on PATH
 #   ./scripts/install.sh -h
 #
 # Env overrides:
@@ -34,7 +31,33 @@ warn() { printf '\033[1;33m[install] %s\033[0m\n' "$*" >&2; }
 die()  { printf '\033[1;31m[install] ERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 trap 'rc=$?; [[ $rc -ne 0 ]] && printf "\n\033[1;31m[install] aborted (exit %s).\033[0m Fix the issue above and re-run — the script is idempotent.\n" "$rc" >&2' EXIT
 
-case "${1:-}" in -h|--help) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; trap - EXIT; exit 0 ;; esac
+INSTALL_ARGS=("$@")   # keep client selection when the curl bootstrap re-execs this script
+CLIENT=claude-code
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --client)
+      [[ $# -ge 2 ]] || die "--client needs claude-code or codex"
+      CLIENT="$2"; shift 2 ;;
+    -h|--help)
+      cat <<'HELP'
+Usage: ./scripts/install.sh [--client claude-code|codex]
+
+Claude Code is the default. --client codex registers the same local MCP server
+with Codex CLI, without changing Claude Code or the web application's .env.
+Install Codex CLI first and use its own login for conversations.
+
+Environment: INSTALL_DIR, REPOS_DIR, SKIP_PULL=1 (preserve the engine checkout).
+HELP
+      trap - EXIT; exit 0 ;;
+    *) die "unknown option: $1 (try --help)" ;;
+  esac
+done
+case "$CLIENT" in claude-code|codex) ;; *) die "unknown client: $CLIENT (choose claude-code or codex)" ;; esac
+if [[ "$CLIENT" == codex ]]; then
+  # Match the shared helper's PATH discovery without requiring the engine checkout yet.
+  case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac
+  command -v codex >/dev/null 2>&1 || die "Codex CLI is required for --client codex. Install it, then re-run."
+fi
 
 INSTALL_DIR="${INSTALL_DIR:-$HOME/llm-d-benchmarking-agent}"
 
@@ -69,7 +92,7 @@ if [[ -z "$MCP_DIR" ]]; then
   fi
   [[ -f "$MCP_DIR/scripts/install.sh" ]] || die "cloned repo is missing $MCP_DIR/scripts/install.sh"
   export _MCP_BOOTSTRAPPED=1
-  exec bash "$MCP_DIR/scripts/install.sh" "$@"   # re-run on-disk so paths resolve normally
+  exec bash "$MCP_DIR/scripts/install.sh" "${INSTALL_ARGS[@]}"   # re-run on-disk so paths resolve normally
 fi
 log "MCP repo: $MCP_DIR"
 
@@ -167,32 +190,40 @@ fi
 "$PY" -c "import llm_d_bench_mcp" >/dev/null 2>&1 || die "the MCP server failed to import after install."
 log "Installed. The server imports OK."
 
-ensure_env   # create .env from .env.example if missing
-
-step "LLM provider"
-set_env_var LLM_PROVIDER claude-agent-sdk
-log "Using claude-agent-sdk — no API key (it authenticates through your local 'claude' login)."
-# claude-agent-sdk can't run without the `claude` CLI: surface an already-installed copy (adds
-# ~/.local/bin to PATH) or offer the official installer. Non-fatal (it warns for you) — you can
-# install + log in later.
-ensure_claude_cli || true
+if [[ "$CLIENT" == claude-code ]]; then
+  ensure_env   # create .env from .env.example if missing
+  step "LLM provider"
+  set_env_var LLM_PROVIDER claude-agent-sdk
+  log "Using claude-agent-sdk — no API key (it authenticates through your local 'claude' login)."
+  ensure_claude_cli || true
+else
+  log "Codex supplies the model and login. Keeping the web application's .env unchanged."
+fi
 
 # HF_TOKEN (for GATED HF model deploys, e.g. Llama/Gemma) isn't prompted — set it in the project's
 # .env, or pass `-e HF_TOKEN=hf_…` to your client, only if you'll actually deploy a gated model.
 
 if [[ -x "$VENV/bin/llm-d-bench-mcp" ]]; then
+  SERVER_CMD=("$VENV/bin/llm-d-bench-mcp")
   CMD_DISPLAY="$VENV/bin/llm-d-bench-mcp"
 else
+  SERVER_CMD=("$PY" -m llm_d_bench_mcp)
   CMD_DISPLAY="$PY -m llm_d_bench_mcp"
 fi
 
-step "Register with Claude Code"
-if [[ "$(menu_select 'Register the MCP server with Claude Code?' 0 \
-         'Claude Code (CLI) — register it for you' \
-         "Skip — I'll wire it up myself")" == 0 ]]; then
-  register_mcp_server "$CMD_DISPLAY" "" 1 || true   # INTERACTIVE=1: the helper prompts for scope and, if the CLI is missing, warns with a manual snippet (never fatal)
+if [[ "$CLIENT" == codex ]]; then
+  step "Register with Codex CLI"
+  "$PY" "$MCP_DIR/scripts/register_codex.py" "${SERVER_CMD[@]}"
+  log "Start a new Codex session and use /mcp to verify llm-d-bench."
 else
-  log "Skipping registration — re-run this installer or see $MCP_DIR/README.md to register it later."
+  step "Register with Claude Code"
+  if [[ "$(menu_select 'Register the MCP server with Claude Code?' 0 \
+           'Claude Code (CLI) — register it for you' \
+           "Skip — I'll wire it up myself")" == 0 ]]; then
+    register_mcp_server "$CMD_DISPLAY" "" 1 || true   # shared helper retains scope selection
+  else
+    log "Skipping registration — re-run this installer or see $MCP_DIR/README.md to register it later."
+  fi
 fi
 
 step "Done"
